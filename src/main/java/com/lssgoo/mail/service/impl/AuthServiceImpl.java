@@ -17,7 +17,9 @@ import com.lssgoo.mail.repository.SessionRepository;
 import com.lssgoo.mail.repository.UserRepository;
 import com.lssgoo.mail.security.jwt.JwtTokenProvider;
 import com.lssgoo.mail.service.AuthService;
+import com.lssgoo.mail.utils.LoggerUtil;
 import jakarta.servlet.http.HttpServletRequest;
+import org.slf4j.Logger;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.security.authentication.AuthenticationManager;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
@@ -34,6 +36,8 @@ import java.util.UUID;
 
 @Service
 public class AuthServiceImpl implements AuthService {
+
+    private static final Logger logger = LoggerUtil.getLogger(AuthServiceImpl.class);
 
     @Autowired
     private UserRepository userRepository;
@@ -62,13 +66,16 @@ public class AuthServiceImpl implements AuthService {
     @Override
     @Transactional
     public AuthResponse register(RegisterRequest request, HttpServletRequest httpRequest) {
+        logger.info("Starting user registration for username: {}", request.getUsername());
         // Check if username already exists
         if (userRepository.existsByUsername(request.getUsername())) {
+            logger.warn("Registration failed: Username already exists - {}", request.getUsername());
             throw new RuntimeException("Username already exists");
         }
 
         // Check if email already exists
         if (userRepository.existsByEmail(request.getEmail())) {
+            logger.warn("Registration failed: Email already exists - {}", request.getEmail());
             throw new RuntimeException("Email already exists");
         }
 
@@ -96,6 +103,7 @@ public class AuthServiceImpl implements AuthService {
         createAuditLog(user, null, "USER_REGISTERED", "User", user.getId(),
                 "User registered successfully", httpRequest);
 
+        logger.info("User registered successfully: {} (ID: {})", user.getUsername(), user.getId());
         // Generate tokens and create session
         return createAuthResponse(user, httpRequest, null, null, null);
     }
@@ -103,6 +111,7 @@ public class AuthServiceImpl implements AuthService {
     @Override
     @Transactional
     public AuthResponse login(LoginRequest request, HttpServletRequest httpRequest) {
+        logger.info("Starting login process for: {}", request.getUsernameOrEmail());
         // Authenticate user
         Authentication authentication = authenticationManager.authenticate(
                 new UsernamePasswordAuthenticationToken(
@@ -112,16 +121,21 @@ public class AuthServiceImpl implements AuthService {
         );
 
         SecurityContextHolder.getContext().setAuthentication(authentication);
+        logger.debug("Authentication successful for: {}", request.getUsernameOrEmail());
 
         // Get user details
         UserDetails userDetails = (UserDetails) authentication.getPrincipal();
         User user = userRepository.findActiveByUsernameOrEmail(userDetails.getUsername())
-                .orElseThrow(() -> new RuntimeException("User not found"));
+                .orElseThrow(() -> {
+                    logger.error("User not found after authentication: {}", userDetails.getUsername());
+                    return new RuntimeException("User not found");
+                });
 
         // Create audit log
         createAuditLog(user, null, "USER_LOGIN", "User", user.getId(),
                 "User logged in successfully", httpRequest);
 
+        logger.info("Login successful for user: {} (ID: {})", user.getUsername(), user.getId());
         // Generate tokens and create session
         return createAuthResponse(user, httpRequest, request.getDeviceInfo(), request.getBrowserInfo(), request.getLocation());
     }
@@ -129,35 +143,47 @@ public class AuthServiceImpl implements AuthService {
     @Override
     @Transactional
     public TokenResponse refreshToken(RefreshTokenRequest request) {
+        logger.info("Token refresh request received");
         // Validate refresh token
         if (!jwtTokenProvider.validateToken(request.getRefreshToken())) {
+            logger.warn("Token refresh failed: Invalid refresh token");
             throw new RuntimeException("Invalid refresh token");
         }
 
         String tokenType = jwtTokenProvider.getTokenType(request.getRefreshToken());
         if (!"refresh".equals(tokenType)) {
+            logger.warn("Token refresh failed: Invalid token type - {}", tokenType);
             throw new RuntimeException("Invalid token type");
         }
 
         // Get user from token
         String username = jwtTokenProvider.getUsernameFromToken(request.getRefreshToken());
+        logger.debug("Token refresh for user: {}", username);
         User user = userRepository.findActiveByUsernameOrEmail(username)
-                .orElseThrow(() -> new RuntimeException("User not found"));
+                .orElseThrow(() -> {
+                    logger.error("User not found for token refresh: {}", username);
+                    return new RuntimeException("User not found");
+                });
 
         // Check if refresh token matches
         if (!request.getRefreshToken().equals(user.getRefreshToken())) {
+            logger.warn("Token refresh failed: Refresh token mismatch for user: {}", username);
             throw new RuntimeException("Refresh token mismatch");
         }
 
         // Get sessionId from the refresh token
         Long sessionId = jwtTokenProvider.getSessionIdFromToken(request.getRefreshToken());
         if (sessionId == null) {
+            logger.warn("Token refresh failed: Session ID not found in token");
             throw new RuntimeException("Session ID not found in token");
         }
 
         // Verify session is still active
         Session session = sessionRepository.findActiveById(sessionId)
-                .orElseThrow(() -> new RuntimeException("Session not found or inactive"));
+                .orElseThrow(() -> {
+                    logger.warn("Token refresh failed: Session not found or inactive - Session ID: {}", sessionId);
+                    return new RuntimeException("Session not found or inactive");
+                });
 
         // Update session last activity and status
         LocalDateTime now = LocalDateTime.now();
@@ -182,6 +208,7 @@ public class AuthServiceImpl implements AuthService {
         createAuditLog(user, session, "TOKEN_REFRESHED", "Session", session.getId(),
                 "Tokens refreshed successfully", null);
 
+        logger.info("Token refreshed successfully for user: {} (Session ID: {})", username, sessionId);
         return TokenResponse.builder()
                 .accessToken(newAccessToken)
                 .refreshToken(newRefreshToken)

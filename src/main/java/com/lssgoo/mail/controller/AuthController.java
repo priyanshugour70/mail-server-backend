@@ -6,6 +6,7 @@ import com.lssgoo.mail.dtos.response.AuthResponse;
 import com.lssgoo.mail.dtos.response.TokenResponse;
 import com.lssgoo.mail.dtos.response.UserResponse;
 import com.lssgoo.mail.service.AuthService;
+import com.lssgoo.mail.utils.LoggerUtil;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.media.Content;
 import io.swagger.v3.oas.annotations.media.Schema;
@@ -15,6 +16,7 @@ import io.swagger.v3.oas.annotations.security.SecurityRequirement;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.Valid;
+import org.slf4j.Logger;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
@@ -25,6 +27,8 @@ import java.time.LocalDateTime;
 @RequestMapping("/api/v1/auth")
 @Tag(name = "Authentication", description = "Authentication and user management APIs")
 public class AuthController {
+
+    private static final Logger logger = LoggerUtil.getLogger(AuthController.class);
 
     @Autowired
     private AuthService authService;
@@ -40,8 +44,10 @@ public class AuthController {
     public ResponseEntity<APIResponse<AuthResponse>> register(
             @Valid @RequestBody RegisterRequest request,
             HttpServletRequest httpRequest) {
+        logger.info("Register request received for username: {}", request.getUsername());
         try {
             AuthResponse response = authService.register(request, httpRequest);
+            logger.info("User registered successfully: {}", request.getUsername());
             return ResponseEntity.ok(APIResponse.<AuthResponse>builder()
                     .success(true)
                     .message("User registered successfully")
@@ -49,6 +55,7 @@ public class AuthController {
                     .timestamp(LocalDateTime.now())
                     .build());
         } catch (Exception e) {
+            logger.error("Registration failed for username: {} - Error: {}", request.getUsername(), e.getMessage(), e);
             return ResponseEntity.ok(APIResponse.<AuthResponse>builder()
                     .success(false)
                     .message(e.getMessage())
@@ -68,8 +75,10 @@ public class AuthController {
     public ResponseEntity<APIResponse<AuthResponse>> login(
             @Valid @RequestBody LoginRequest request,
             HttpServletRequest httpRequest) {
+        logger.info("Login request received for: {}", request.getUsernameOrEmail());
         try {
             AuthResponse response = authService.login(request, httpRequest);
+            logger.info("Login successful for: {}", request.getUsernameOrEmail());
             return ResponseEntity.ok(APIResponse.<AuthResponse>builder()
                     .success(true)
                     .message("Login successful")
@@ -77,6 +86,7 @@ public class AuthController {
                     .timestamp(LocalDateTime.now())
                     .build());
         } catch (Exception e) {
+            logger.error("Login failed for: {} - Error: {}", request.getUsernameOrEmail(), e.getMessage(), e);
             return ResponseEntity.ok(APIResponse.<AuthResponse>builder()
                     .success(false)
                     .message(e.getMessage())
@@ -95,8 +105,10 @@ public class AuthController {
     @PostMapping("/refresh")
     public ResponseEntity<APIResponse<TokenResponse>> refreshToken(
             @Valid @RequestBody RefreshTokenRequest request) {
+        logger.info("Token refresh request received");
         try {
             TokenResponse response = authService.refreshToken(request);
+            logger.info("Token refreshed successfully");
             return ResponseEntity.ok(APIResponse.<TokenResponse>builder()
                     .success(true)
                     .message("Token refreshed successfully")
@@ -104,6 +116,7 @@ public class AuthController {
                     .timestamp(LocalDateTime.now())
                     .build());
         } catch (Exception e) {
+            logger.error("Token refresh failed - Error: {}", e.getMessage(), e);
             return ResponseEntity.ok(APIResponse.<TokenResponse>builder()
                     .success(false)
                     .message(e.getMessage())
@@ -124,17 +137,20 @@ public class AuthController {
     public ResponseEntity<APIResponse<Void>> logout(
             @RequestBody(required = false) LogoutRequest request,
             HttpServletRequest httpRequest) {
+        logger.info("Logout request received");
         try {
             if (request == null) {
                 request = new LogoutRequest();
             }
             authService.logout(request, httpRequest);
+            logger.info("Logout successful");
             return ResponseEntity.ok(APIResponse.<Void>builder()
                     .success(true)
                     .message("Logout successful")
                     .timestamp(LocalDateTime.now())
                     .build());
         } catch (Exception e) {
+            logger.error("Logout failed - Error: {}", e.getMessage(), e);
             return ResponseEntity.ok(APIResponse.<Void>builder()
                     .success(false)
                     .message(e.getMessage())
@@ -153,8 +169,10 @@ public class AuthController {
     @SecurityRequirement(name = "bearerAuth")
     @GetMapping("/me")
     public ResponseEntity<APIResponse<UserResponse>> getCurrentUser(HttpServletRequest httpRequest) {
+        logger.info("Get current user request received");
         try {
             UserResponse response = authService.getCurrentUser(httpRequest);
+            logger.info("Current user retrieved successfully");
             return ResponseEntity.ok(APIResponse.<UserResponse>builder()
                     .success(true)
                     .message("User retrieved successfully")
@@ -162,6 +180,7 @@ public class AuthController {
                     .timestamp(LocalDateTime.now())
                     .build());
         } catch (Exception e) {
+            logger.error("Failed to get current user - Error: {}", e.getMessage(), e);
             return ResponseEntity.ok(APIResponse.<UserResponse>builder()
                     .success(false)
                     .message(e.getMessage())
@@ -182,14 +201,17 @@ public class AuthController {
     public ResponseEntity<APIResponse<Void>> changePassword(
             @Valid @RequestBody ChangePasswordRequest request,
             HttpServletRequest httpRequest) {
+        logger.info("Change password request received");
         try {
             authService.changePassword(request, httpRequest);
+            logger.info("Password changed successfully");
             return ResponseEntity.ok(APIResponse.<Void>builder()
                     .success(true)
                     .message("Password changed successfully")
                     .timestamp(LocalDateTime.now())
                     .build());
         } catch (Exception e) {
+            logger.error("Password change failed - Error: {}", e.getMessage(), e);
             return ResponseEntity.ok(APIResponse.<Void>builder()
                     .success(false)
                     .message(e.getMessage())

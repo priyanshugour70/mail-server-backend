@@ -1,9 +1,11 @@
 package com.lssgoo.mail.security.jwt;
 
+import com.lssgoo.mail.utils.LoggerUtil;
 import jakarta.servlet.FilterChain;
 import jakarta.servlet.ServletException;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
+import org.slf4j.Logger;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.context.SecurityContextHolder;
@@ -18,6 +20,8 @@ import java.io.IOException;
 
 @Component
 public class JwtAuthenticationFilter extends OncePerRequestFilter {
+
+    private static final Logger logger = LoggerUtil.getLogger(JwtAuthenticationFilter.class);
 
     @Autowired
     private JwtTokenProvider tokenProvider;
@@ -36,15 +40,19 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
                 String tokenType = tokenProvider.getTokenType(jwt);
 
                 if ("access".equals(tokenType)) {
+                    logger.debug("Authenticating user: {} from JWT token", username);
                     UserDetails userDetails = userDetailsService.loadUserByUsername(username);
                     UsernamePasswordAuthenticationToken authentication = new UsernamePasswordAuthenticationToken(
                             userDetails, null, userDetails.getAuthorities());
                     authentication.setDetails(new WebAuthenticationDetailsSource().buildDetails(request));
                     SecurityContextHolder.getContext().setAuthentication(authentication);
+                    logger.debug("User authenticated successfully: {}", username);
+                } else {
+                    logger.debug("Token type is not access token: {}", tokenType);
                 }
             }
         } catch (Exception ex) {
-            logger.error("Could not set user authentication in security context", ex);
+            logger.error("Could not set user authentication in security context - Error: {}", ex.getMessage(), ex);
         }
 
         filterChain.doFilter(request, response);

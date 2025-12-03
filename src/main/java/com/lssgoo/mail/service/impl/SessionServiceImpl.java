@@ -8,7 +8,9 @@ import com.lssgoo.mail.repository.SessionActivityRepository;
 import com.lssgoo.mail.repository.SessionRepository;
 import com.lssgoo.mail.security.jwt.JwtTokenProvider;
 import com.lssgoo.mail.service.SessionService;
+import com.lssgoo.mail.utils.LoggerUtil;
 import jakarta.servlet.http.HttpServletRequest;
+import org.slf4j.Logger;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -19,6 +21,8 @@ import java.util.stream.Collectors;
 
 @Service
 public class SessionServiceImpl implements SessionService {
+
+    private static final Logger logger = LoggerUtil.getLogger(SessionServiceImpl.class);
 
     @Autowired
     private SessionRepository sessionRepository;
@@ -32,8 +36,10 @@ public class SessionServiceImpl implements SessionService {
     @Override
     @Transactional(readOnly = true)
     public SessionResponse getCurrentSession(HttpServletRequest httpRequest) {
+        logger.debug("Get current session request received");
         String token = extractTokenFromRequest(httpRequest);
         if (token == null) {
+            logger.warn("Get current session failed: Token not found");
             throw new RuntimeException("Token not found");
         }
 
@@ -41,19 +47,25 @@ public class SessionServiceImpl implements SessionService {
         Long sessionId = jwtTokenProvider.getSessionIdFromToken(token);
 
         if (sessionId == null) {
+            logger.warn("Get current session failed: Session ID not found in token");
             throw new RuntimeException("Session ID not found in token");
         }
 
         Session session = sessionRepository.findActiveById(sessionId)
-                .orElseThrow(() -> new RuntimeException("Session not found or inactive"));
+                .orElseThrow(() -> {
+                    logger.warn("Get current session failed: Session not found or inactive - Session ID: {}", sessionId);
+                    return new RuntimeException("Session not found or inactive");
+                });
 
         // Verify session belongs to user
         if (!session.getUser().getId().equals(userId)) {
+            logger.warn("Get current session failed: Session does not belong to user - User ID: {}, Session User ID: {}", userId, session.getUser().getId());
             throw new RuntimeException("Session does not belong to user");
         }
 
         // Update status
         updateSessionStatus(session);
+        logger.debug("Current session retrieved successfully - Session ID: {}", sessionId);
 
         return buildSessionResponse(session);
     }

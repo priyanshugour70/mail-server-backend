@@ -1,7 +1,9 @@
 package com.lssgoo.mail.security.jwt;
 
+import com.lssgoo.mail.utils.LoggerUtil;
 import io.jsonwebtoken.*;
 import io.jsonwebtoken.security.Keys;
+import org.slf4j.Logger;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 
@@ -14,6 +16,8 @@ import java.util.function.Function;
 
 @Component
 public class JwtTokenProvider {
+
+    private static final Logger logger = LoggerUtil.getLogger(JwtTokenProvider.class);
 
     @Value("${jwt.secret:your-secret-key-must-be-at-least-256-bits-long-for-hs256-algorithm}")
     private String jwtSecret;
@@ -30,6 +34,7 @@ public class JwtTokenProvider {
     }
 
     public String generateAccessToken(Long userId, String username, Long sessionId) {
+        logger.debug("Generating access token for user: {} (ID: {}), session: {}", username, userId, sessionId);
         Map<String, Object> claims = new HashMap<>();
         claims.put("userId", userId);
         claims.put("username", username);
@@ -39,6 +44,7 @@ public class JwtTokenProvider {
     }
 
     public String generateRefreshToken(Long userId, String username, Long sessionId) {
+        logger.debug("Generating refresh token for user: {} (ID: {}), session: {}", username, userId, sessionId);
         Map<String, Object> claims = new HashMap<>();
         claims.put("userId", userId);
         claims.put("username", username);
@@ -107,12 +113,16 @@ public class JwtTokenProvider {
                     .parseSignedClaims(token)
                     .getPayload();
         } catch (ExpiredJwtException e) {
+            logger.warn("JWT token is expired");
             throw new RuntimeException("JWT token is expired", e);
         } catch (UnsupportedJwtException e) {
+            logger.warn("JWT token is unsupported");
             throw new RuntimeException("JWT token is unsupported", e);
         } catch (MalformedJwtException e) {
+            logger.warn("Invalid JWT token format");
             throw new RuntimeException("Invalid JWT token", e);
         } catch (IllegalArgumentException e) {
+            logger.warn("JWT claims string is empty");
             throw new RuntimeException("JWT claims string is empty", e);
         }
     }
@@ -122,6 +132,7 @@ public class JwtTokenProvider {
             getAllClaimsFromToken(token);
             return true;
         } catch (Exception e) {
+            logger.debug("Token validation failed: {}", e.getMessage());
             return false;
         }
     }

@@ -8,7 +8,9 @@ import com.lssgoo.mail.entity.Organisation;
 import com.lssgoo.mail.repository.AuditLogRepository;
 import com.lssgoo.mail.repository.OrganisationRepository;
 import com.lssgoo.mail.service.OrganisationService;
+import com.lssgoo.mail.utils.LoggerUtil;
 import jakarta.servlet.http.HttpServletRequest;
+import org.slf4j.Logger;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -20,6 +22,8 @@ import java.util.stream.Collectors;
 @Service
 public class OrganisationServiceImpl implements OrganisationService {
 
+    private static final Logger logger = LoggerUtil.getLogger(OrganisationServiceImpl.class);
+
     @Autowired
     private OrganisationRepository organisationRepository;
 
@@ -29,14 +33,17 @@ public class OrganisationServiceImpl implements OrganisationService {
     @Override
     @Transactional
     public OrganisationResponse createOrganisation(CreateOrganisationRequest request) {
+        logger.info("Creating organisation: {}", request.getName());
         // Check if organisation with same name exists
         if (organisationRepository.existsByName(request.getName())) {
+            logger.warn("Organisation creation failed: Name already exists - {}", request.getName());
             throw new RuntimeException("Organisation with name '" + request.getName() + "' already exists");
         }
 
         // Check if domain is provided and if it already exists
         if (request.getDomain() != null && !request.getDomain().isEmpty()) {
             if (organisationRepository.existsByDomain(request.getDomain())) {
+                logger.warn("Organisation creation failed: Domain already exists - {}", request.getDomain());
                 throw new RuntimeException("Organisation with domain '" + request.getDomain() + "' already exists");
             }
         }
@@ -54,6 +61,7 @@ public class OrganisationServiceImpl implements OrganisationService {
         createAuditLog(null, null, "ORGANISATION_CREATED", "Organisation", organisation.getId(),
                 "Organisation created: " + organisation.getName(), null);
 
+        logger.info("Organisation created successfully: {} (ID: {})", organisation.getName(), organisation.getId());
         return buildOrganisationResponse(organisation);
     }
 
