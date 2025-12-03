@@ -7,6 +7,8 @@ import lombok.EqualsAndHashCode;
 import lombok.NoArgsConstructor;
 
 import java.time.LocalDateTime;
+import java.util.ArrayList;
+import java.util.List;
 
 @Entity
 @Table(name = "sessions")
@@ -44,6 +46,9 @@ public class Session extends BaseEntity {
     @Column(name = "last_activity_at")
     private LocalDateTime lastActivityAt;
 
+    @Column(name = "status_checked_at")
+    private LocalDateTime statusCheckedAt;
+
     @Column(name = "expires_at")
     private LocalDateTime expiresAt;
 
@@ -55,5 +60,11 @@ public class Session extends BaseEntity {
 
     @Column(name = "location")
     private String location;
+
+    @Column(name = "refresh_count", columnDefinition = "integer default 0")
+    private Integer refreshCount = 0;
+
+    @OneToMany(mappedBy = "session", cascade = CascadeType.ALL, fetch = FetchType.LAZY)
+    private List<SessionActivity> activities = new ArrayList<>();
 }
 

@@ -6,6 +6,7 @@ import lombok.Data;
 import lombok.NoArgsConstructor;
 
 import java.time.LocalDateTime;
+import java.util.List;
 
 @Data
 @Builder
@@ -22,8 +23,13 @@ public class SessionResponse {
     private String browserInfo;
     private String location;
     private LocalDateTime loginAt;
+    private LocalDateTime logoutAt;
     private LocalDateTime lastActivityAt;
+    private LocalDateTime statusCheckedAt;
     private LocalDateTime expiresAt;
     private Boolean isActive;
+    private String logoutReason;
+    private Integer refreshCount;
+    private List<SessionActivityResponse> activities;
 }
 

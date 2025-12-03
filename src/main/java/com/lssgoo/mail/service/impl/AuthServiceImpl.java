@@ -9,8 +9,10 @@ import com.lssgoo.mail.entity.AuditLog;
 import com.lssgoo.mail.entity.Organisation;
 import com.lssgoo.mail.entity.Session;
 import com.lssgoo.mail.entity.User;
+import com.lssgoo.mail.entity.SessionActivity;
 import com.lssgoo.mail.repository.AuditLogRepository;
 import com.lssgoo.mail.repository.OrganisationRepository;
+import com.lssgoo.mail.repository.SessionActivityRepository;
 import com.lssgoo.mail.repository.SessionRepository;
 import com.lssgoo.mail.repository.UserRepository;
 import com.lssgoo.mail.security.jwt.JwtTokenProvider;
@@ -27,6 +29,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
+import java.util.List;
 import java.util.UUID;
 
 @Service
@@ -43,6 +46,9 @@ public class AuthServiceImpl implements AuthService {
 
     @Autowired
     private AuditLogRepository auditLogRepository;
+
+    @Autowired
+    private SessionActivityRepository sessionActivityRepository;
 
     @Autowired
     private PasswordEncoder passwordEncoder;
@@ -153,9 +159,15 @@ public class AuthServiceImpl implements AuthService {
         Session session = sessionRepository.findActiveById(sessionId)
                 .orElseThrow(() -> new RuntimeException("Session not found or inactive"));
 
-        // Update session last activity
-        session.setLastActivityAt(LocalDateTime.now());
+        // Update session last activity and status
+        LocalDateTime now = LocalDateTime.now();
+        session.setLastActivityAt(now);
+        session.setStatusCheckedAt(now);
+        session.setRefreshCount(session.getRefreshCount() != null ? session.getRefreshCount() + 1 : 1);
         sessionRepository.save(session);
+
+        // Create session activity
+        createSessionActivity(session, "TOKEN_REFRESHED", "Tokens refreshed successfully", null, null);
 
         // Generate new tokens with the same sessionId
         String newAccessToken = jwtTokenProvider.generateAccessToken(user.getId(), user.getUsername(), sessionId);
@@ -190,16 +202,41 @@ public class AuthServiceImpl implements AuthService {
         User user = userRepository.findActiveById(userId)
                 .orElseThrow(() -> new RuntimeException("User not found"));
 
+        LocalDateTime now = LocalDateTime.now();
+        
         if (Boolean.TRUE.equals(request.getLogoutAllSessions())) {
             // Logout all sessions
-            sessionRepository.deactivateAllUserSessions(userId, LocalDateTime.now(), request.getLogoutReason());
+            List<Session> activeSessions = sessionRepository.findActiveSessionsByUserId(userId);
+            for (Session session : activeSessions) {
+                session.setIsActive(false);
+                session.setLogoutAt(now);
+                session.setLogoutReason(request.getLogoutReason());
+                session.setStatusCheckedAt(now);
+                sessionRepository.save(session);
+                
+                // Create session activity
+                createSessionActivity(session, "LOGOUT", "User logged out from all sessions", 
+                        getClientIpAddress(httpRequest), httpRequest.getHeader("User-Agent"));
+            }
             user.setCurrentSessionId(null);
             user.setAccessToken(null);
             user.setRefreshToken(null);
         } else {
             // Logout current session only
             if (user.getCurrentSessionId() != null) {
-                sessionRepository.deactivateSession(user.getCurrentSessionId(), LocalDateTime.now(), request.getLogoutReason());
+                Session session = sessionRepository.findActiveById(user.getCurrentSessionId())
+                        .orElse(null);
+                if (session != null) {
+                    session.setIsActive(false);
+                    session.setLogoutAt(now);
+                    session.setLogoutReason(request.getLogoutReason());
+                    session.setStatusCheckedAt(now);
+                    sessionRepository.save(session);
+                    
+                    // Create session activity
+                    createSessionActivity(session, "LOGOUT", "User logged out", 
+                            getClientIpAddress(httpRequest), httpRequest.getHeader("User-Agent"));
+                }
                 user.setCurrentSessionId(null);
             }
             user.setAccessToken(null);
@@ -232,9 +269,14 @@ public class AuthServiceImpl implements AuthService {
             Session session = sessionRepository.findActiveById(sessionId)
                     .orElseThrow(() -> new RuntimeException("Session not found or inactive"));
             
-            // Update last activity
-            session.setLastActivityAt(LocalDateTime.now());
+            // Update last activity and status
+            LocalDateTime now = LocalDateTime.now();
+            session.setLastActivityAt(now);
+            session.setStatusCheckedAt(now);
             sessionRepository.save(session);
+            
+            // Create session activity
+            createSessionActivity(session, "ACTIVITY_CHECK", "User activity checked", null, null);
         }
 
         return buildUserResponse(user);
@@ -277,12 +319,19 @@ public class AuthServiceImpl implements AuthService {
         session.setDeviceInfo(deviceInfo);
         session.setBrowserInfo(browserInfo);
         session.setLocation(location);
-        session.setLoginAt(LocalDateTime.now());
-        session.setLastActivityAt(LocalDateTime.now());
-        session.setExpiresAt(LocalDateTime.now().plusSeconds(jwtTokenProvider.getRefreshTokenExpirationInMillis() / 1000));
+        LocalDateTime now = LocalDateTime.now();
+        session.setLoginAt(now);
+        session.setLastActivityAt(now);
+        session.setStatusCheckedAt(now);
+        session.setRefreshCount(0);
+        session.setExpiresAt(now.plusSeconds(jwtTokenProvider.getRefreshTokenExpirationInMillis() / 1000));
         session.setIsActive(true);
 
         session = sessionRepository.save(session);
+
+        // Create initial session activity
+        createSessionActivity(session, "SESSION_CREATED", "Session created on login", 
+                getClientIpAddress(httpRequest), httpRequest.getHeader("User-Agent"));
 
         // Generate tokens with sessionId
         String accessToken = jwtTokenProvider.generateAccessToken(user.getId(), user.getUsername(), session.getId());
@@ -337,9 +386,23 @@ public class AuthServiceImpl implements AuthService {
                 .location(session.getLocation())
                 .loginAt(session.getLoginAt())
                 .lastActivityAt(session.getLastActivityAt())
+                .statusCheckedAt(session.getStatusCheckedAt())
                 .expiresAt(session.getExpiresAt())
                 .isActive(session.getIsActive())
+                .refreshCount(session.getRefreshCount() != null ? session.getRefreshCount() : 0)
                 .build();
+    }
+
+    private void createSessionActivity(Session session, String activityType, String description, 
+                                      String ipAddress, String userAgent) {
+        SessionActivity activity = new SessionActivity();
+        activity.setSession(session);
+        activity.setActivityType(activityType);
+        activity.setDescription(description);
+        activity.setIpAddress(ipAddress);
+        activity.setUserAgent(userAgent);
+        activity.setActivityTimestamp(LocalDateTime.now());
+        sessionActivityRepository.save(activity);
     }
 
     private void createAuditLog(User user, Session session, String action, String entityType,
@@ -351,10 +414,12 @@ public class AuthServiceImpl implements AuthService {
         auditLog.setEntityType(entityType);
         auditLog.setEntityId(entityId);
         auditLog.setDescription(description);
-        auditLog.setIpAddress(getClientIpAddress(httpRequest));
-        auditLog.setUserAgent(httpRequest.getHeader("User-Agent"));
-        auditLog.setRequestMethod(httpRequest.getMethod());
-        auditLog.setRequestUrl(httpRequest.getRequestURI());
+        if (httpRequest != null) {
+            auditLog.setIpAddress(getClientIpAddress(httpRequest));
+            auditLog.setUserAgent(httpRequest.getHeader("User-Agent"));
+            auditLog.setRequestMethod(httpRequest.getMethod());
+            auditLog.setRequestUrl(httpRequest.getRequestURI());
+        }
         auditLog.setTimestamp(LocalDateTime.now());
         auditLogRepository.save(auditLog);
     }
