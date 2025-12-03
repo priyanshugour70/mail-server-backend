@@ -143,14 +143,32 @@ public class AuthServiceImpl implements AuthService {
             throw new RuntimeException("Refresh token mismatch");
         }
 
-        // Generate new tokens
-        String newAccessToken = jwtTokenProvider.generateAccessToken(user.getId(), user.getUsername());
-        String newRefreshToken = jwtTokenProvider.generateRefreshToken(user.getId(), user.getUsername());
+        // Get sessionId from the refresh token
+        Long sessionId = jwtTokenProvider.getSessionIdFromToken(request.getRefreshToken());
+        if (sessionId == null) {
+            throw new RuntimeException("Session ID not found in token");
+        }
+
+        // Verify session is still active
+        Session session = sessionRepository.findActiveById(sessionId)
+                .orElseThrow(() -> new RuntimeException("Session not found or inactive"));
+
+        // Update session last activity
+        session.setLastActivityAt(LocalDateTime.now());
+        sessionRepository.save(session);
+
+        // Generate new tokens with the same sessionId
+        String newAccessToken = jwtTokenProvider.generateAccessToken(user.getId(), user.getUsername(), sessionId);
+        String newRefreshToken = jwtTokenProvider.generateRefreshToken(user.getId(), user.getUsername(), sessionId);
 
         // Update user tokens
         user.setAccessToken(newAccessToken);
         user.setRefreshToken(newRefreshToken);
         userRepository.save(user);
+
+        // Create audit log
+        createAuditLog(user, session, "TOKEN_REFRESHED", "Session", session.getId(),
+                "Tokens refreshed successfully", null);
 
         return TokenResponse.builder()
                 .accessToken(newAccessToken)
@@ -204,8 +222,20 @@ public class AuthServiceImpl implements AuthService {
         }
 
         Long userId = jwtTokenProvider.getUserIdFromToken(token);
+        Long sessionId = jwtTokenProvider.getSessionIdFromToken(token);
+        
         User user = userRepository.findActiveById(userId)
                 .orElseThrow(() -> new RuntimeException("User not found"));
+
+        // Verify session is active and matches
+        if (sessionId != null) {
+            Session session = sessionRepository.findActiveById(sessionId)
+                    .orElseThrow(() -> new RuntimeException("Session not found or inactive"));
+            
+            // Update last activity
+            session.setLastActivityAt(LocalDateTime.now());
+            sessionRepository.save(session);
+        }
 
         return buildUserResponse(user);
     }
@@ -238,11 +268,7 @@ public class AuthServiceImpl implements AuthService {
 
     private AuthResponse createAuthResponse(User user, HttpServletRequest httpRequest,
                                            String deviceInfo, String browserInfo, String location) {
-        // Generate tokens
-        String accessToken = jwtTokenProvider.generateAccessToken(user.getId(), user.getUsername());
-        String refreshToken = jwtTokenProvider.generateRefreshToken(user.getId(), user.getUsername());
-
-        // Create session
+        // Create session first to get sessionId
         Session session = new Session();
         session.setUser(user);
         session.setSessionToken(UUID.randomUUID().toString());
@@ -257,6 +283,10 @@ public class AuthServiceImpl implements AuthService {
         session.setIsActive(true);
 
         session = sessionRepository.save(session);
+
+        // Generate tokens with sessionId
+        String accessToken = jwtTokenProvider.generateAccessToken(user.getId(), user.getUsername(), session.getId());
+        String refreshToken = jwtTokenProvider.generateRefreshToken(user.getId(), user.getUsername(), session.getId());
 
         // Update user with tokens and session
         user.setAccessToken(accessToken);

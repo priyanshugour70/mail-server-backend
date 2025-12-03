@@ -19,3 +19,28 @@ jwt:
   secret: your-secret-key-must-be-at-least-256-bits-long-for-hs256-algorithm-please-change-this-in-production
   access-token-expiration: 3600000  # 1 hour in milliseconds
   refresh-token-expiration: 604800000  # 7 days in milliseconds
+
+# Actuator Configuration
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,metrics,prometheus,env,beans,configprops
+      base-path: /actuator
+  endpoint:
+    health:
+      show-details: when-authorized
+  info:
+    env:
+      enabled: true
+
+# SpringDoc OpenAPI (Swagger) Configuration
+springdoc:
+  api-docs:
+    path: /v3/api-docs
+  swagger-ui:
+    path: /swagger-ui.html
+    enabled: true
+    try-it-out-enabled: true
+  default-consumes-media-type: application/json
+  default-produces-media-type: application/json

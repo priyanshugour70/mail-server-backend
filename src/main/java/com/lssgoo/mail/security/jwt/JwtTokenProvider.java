@@ -29,18 +29,20 @@ public class JwtTokenProvider {
         return Keys.hmacShaKeyFor(keyBytes);
     }
 
-    public String generateAccessToken(Long userId, String username) {
+    public String generateAccessToken(Long userId, String username, Long sessionId) {
         Map<String, Object> claims = new HashMap<>();
         claims.put("userId", userId);
         claims.put("username", username);
+        claims.put("sessionId", sessionId);
         claims.put("type", "access");
         return createToken(claims, username, accessTokenExpiration);
     }
 
-    public String generateRefreshToken(Long userId, String username) {
+    public String generateRefreshToken(Long userId, String username, Long sessionId) {
         Map<String, Object> claims = new HashMap<>();
         claims.put("userId", userId);
         claims.put("username", username);
+        claims.put("sessionId", sessionId);
         claims.put("type", "refresh");
         return createToken(claims, username, refreshTokenExpiration);
     }
@@ -65,6 +67,18 @@ public class JwtTokenProvider {
             return ((Integer) userId).longValue();
         }
         return (Long) userId;
+    }
+
+    public Long getSessionIdFromToken(String token) {
+        Claims claims = getAllClaimsFromToken(token);
+        Object sessionId = claims.get("sessionId");
+        if (sessionId == null) {
+            return null;
+        }
+        if (sessionId instanceof Integer) {
+            return ((Integer) sessionId).longValue();
+        }
+        return (Long) sessionId;
     }
 
     public String getUsernameFromToken(String token) {
