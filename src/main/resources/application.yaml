@@ -1,24 +1,27 @@
 spring:
   application:
-    name: mail-server-backend
+    name: ${SPRING_APPLICATION_NAME:mail-server-backend}
   datasource:
-    url: jdbc:postgresql://localhost:5432/mail_server
-    username: mail_server
-    password: password
+    url: jdbc:postgresql://${DB_HOST:localhost}:${DB_PORT:5432}/${DB_NAME:mail_server}
+    username: ${DB_USERNAME:mail_server}
+    password: ${DB_PASSWORD:password}
     driver-class-name: org.postgresql.Driver
   jpa:
     hibernate:
       ddl-auto: update
-    show-sql: true
+    show-sql: ${SPRING_JPA_SHOW_SQL:false}
     properties:
       hibernate:
         dialect: org.hibernate.dialect.PostgreSQLDialect
         format_sql: true
 
+server:
+  port: ${SERVER_PORT:8080}
+
 jwt:
-  secret: your-secret-key-must-be-at-least-256-bits-long-for-hs256-algorithm-please-change-this-in-production
-  access-token-expiration: 3600000  # 1 hour in milliseconds
-  refresh-token-expiration: 604800000  # 7 days in milliseconds
+  secret: ${JWT_SECRET:your-secret-key-must-be-at-least-256-bits-long-for-hs256-algorithm-please-change-this-in-production}
+  access-token-expiration: ${JWT_ACCESS_TOKEN_EXPIRATION:3600000}  # 1 hour in milliseconds
+  refresh-token-expiration: ${JWT_REFRESH_TOKEN_EXPIRATION:604800000}  # 7 days in milliseconds
 
 # Actuator Configuration
 management:
@@ -40,7 +43,7 @@ springdoc:
     path: /v3/api-docs
   swagger-ui:
     path: /swagger-ui.html
-    enabled: true
+    enabled: ${SWAGGER_ENABLED:true}
     try-it-out-enabled: true
   default-consumes-media-type: application/json
   default-produces-media-type: application/json
