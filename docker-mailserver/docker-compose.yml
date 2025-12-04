@@ -3,9 +3,9 @@ version: '3.8'
 services:
   mailserver:
     image: docker.io/mailserver/docker-mailserver:latest
-    container_name: mailserver
-    hostname: mail
-    domainname: lssgoo.com
+    container_name: ${CONTAINER_NAME:-mailserver}
+    hostname: ${MAIL_HOSTNAME:-mail}
+    domainname: ${MAIL_DOMAIN:-lssgoo.com}
     ports:
       - "25:25"
       - "143:143"
@@ -17,19 +17,21 @@ services:
       - ./config:/tmp/docker-mailserver
       - ./state:/var/mail-state
     environment:
-      - ENABLE_SPAMASSASSIN=1
-      - ENABLE_CLAMAV=1
-      - ENABLE_FAIL2BAN=1
-      - ENABLE_POSTGREY=1
-      - ONE_DIR=1
-      - DMS_DEBUG=0
-      - PERMIT_DOCKER=host
+      - ENABLE_SPAMASSASSIN=${ENABLE_SPAMASSASSIN:-1}
+      - ENABLE_CLAMAV=${ENABLE_CLAMAV:-1}
+      - ENABLE_FAIL2BAN=${ENABLE_FAIL2BAN:-1}
+      - ENABLE_POSTGREY=${ENABLE_POSTGREY:-1}
+      - ONE_DIR=${ONE_DIR:-1}
+      - DMS_DEBUG=${DMS_DEBUG:-0}
+      - PERMIT_DOCKER=${PERMIT_DOCKER:-host}
+      - POSTMASTER_ADDRESS=${POSTMASTER_ADDRESS:-postmaster@lssgoo.com}
+      - LOG_LEVEL=${LOG_LEVEL:-info}
     cap_add:
       - NET_ADMIN
       - SYS_PTRACE
     restart: always
     networks:
-      - mail-network
+      - ${NETWORK_NAME:-mail-network}
 
 networks:
   mail-network:

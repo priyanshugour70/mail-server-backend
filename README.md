@@ -74,7 +74,7 @@ Already configured to use environment variables from `.env`!
 5. **DKIM Record**: `default._domainkey` → (from get-dkim.sh)
 6. **DMARC Record**: `_dmarc` → `v=DMARC1; p=quarantine; rua=mailto:dmarc@lssgoo.com;`
 
-See **[DEPLOYMENT_GUIDE.md](DEPLOYMENT_GUIDE.md)** for detailed DNS setup.
+See **[DEPLOYMENT_GUIDE.md](docs/DEPLOYMENT_GUIDE.md)** for detailed DNS setup.
 
 ---
 
